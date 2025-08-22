@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <title>Link Manager</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="favicon.png">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
   <div class="container">
@@ -23,6 +25,15 @@
     <input type="file" id="importFile" accept=".xlsx" style="display:none;">
 
     <ul id="linksList"></ul>
+  </div>
+
+  <div id="qrModal" class="modal">
+    <div class="modal-content">
+      <span class="close-btn">&times;</span>
+      <center>
+      <div id="qrcode"></div></center>
+      <p>Scan this QR code with your mobile device to open the link.</p>
+    </div>
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>

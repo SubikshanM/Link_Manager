@@ -11,6 +11,11 @@ const exportBtn = document.getElementById("exportBtn");
 const importBtn = document.getElementById("importBtn");
 const importFile = document.getElementById("importFile");
 
+// QR Code Modal elements
+const qrModal = document.getElementById("qrModal");
+const qrcodeDiv = document.getElementById("qrcode");
+const closeBtn = document.querySelector(".close-btn");
+
 function saveLinks() {
   localStorage.setItem("links", JSON.stringify(links));
 }
@@ -47,7 +52,20 @@ function renderLinks(filter = "") {
       navigator.clipboard.writeText(link.url);
       alert("URL copied!");
     };
-
+    
+    // QR Button to generate and show QR code
+    const qrBtn = document.createElement("button");
+    qrBtn.className = "action qr-btn";
+    qrBtn.textContent = "QR";
+    qrBtn.onclick = () => {
+        // Clear the QR code container to prevent duplicates
+        qrcodeDiv.innerHTML = "";
+        
+        // Generate and display the new QR code
+        new QRCode(qrcodeDiv, link.url);
+        qrModal.style.display = "block";
+    };
+    
     const favBtn = document.createElement("button");
     favBtn.className = "action favorite-btn";
     favBtn.textContent = link.favorite ? "★" : "☆";
@@ -72,11 +90,25 @@ function renderLinks(filter = "") {
       }
     };
 
-    actions.append(copyBtn, favBtn, delBtn);
+    actions.append(copyBtn, qrBtn, favBtn, delBtn);
     li.append(info, actions);
     linksList.appendChild(li);
   });
 }
+
+// Close the QR code modal when the user clicks the close button
+if (closeBtn) {
+  closeBtn.onclick = () => {
+    qrModal.style.display = "none";
+  };
+}
+
+// Close the QR code modal when the user clicks anywhere outside of it
+window.onclick = (event) => {
+  if (event.target === qrModal) {
+    qrModal.style.display = "none";
+  }
+};
 
 form.addEventListener("submit", (e) => {
   e.preventDefault();
@@ -127,7 +159,7 @@ importFile.addEventListener("change", (e) => {
         const urlKey = Object.keys(row).find(k => k.toLowerCase() === 'url');
         const tagsKey = Object.keys(row).find(k => k.toLowerCase() === 'tags');
         const favoriteKey = Object.keys(row).find(k => k.toLowerCase() === 'favorite');
-
+        
         return {
           title: titleKey ? row[titleKey] || "" : "",
           url: urlKey ? row[urlKey] || "" : "",
