@@ -1,0 +1,107 @@
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f4f9;
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+}
+
+.container {
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  width: 500px;
+  max-width: 100%;
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+form {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 15px;
+}
+
+form input, form button {
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  flex: 1;
+}
+
+form button {
+  background: #007bff;
+  color: white;
+  cursor: pointer;
+  flex: 0.3;
+}
+
+#search {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 15px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+#exportBtn, #importBtn {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  color: white;
+}
+
+#exportBtn { background: #28a745; }
+#importBtn { background: #6f42c1; }
+
+#linksList {
+  list-style: none;
+  padding: 0;
+}
+
+.link-item {
+  background: #fafafa;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.link-info {
+  flex: 1;
+}
+
+.link-info a {
+  font-weight: bold;
+  text-decoration: none;
+  color: #007bff;
+}
+
+.tags {
+  font-size: 0.85em;
+  color: #666;
+}
+
+button.action {
+  margin-left: 6px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.copy-btn { background: #17a2b8; color: white; }
+.delete-btn { background: #dc3545; color: white; }
+.favorite-btn { background: #ffc107; color: black; }
+.favorite { border: 2px solid gold; }

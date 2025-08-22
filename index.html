@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Link Manager</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>🔗 Link Manager</h1>
+
+    <form id="linkForm">
+      <input type="text" id="title" placeholder="Enter title" required>
+      <input type="url" id="url" placeholder="Enter URL (https://...)" required>
+      <input type="text" id="tags" placeholder="Enter tags (optional)">
+      <button type="submit">Add</button>
+    </form>
+
+    <input type="text" id="search" placeholder="Search titles...">
+
+    <button id="exportBtn">⬇️ Export to Excel</button>
+    <button id="importBtn">⬆️ Import from Excel</button>
+    <input type="file" id="importFile" accept=".xlsx" style="display:none;">
+
+    <ul id="linksList"></ul>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
