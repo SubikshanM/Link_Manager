@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Link Manager</title>
   <link rel="stylesheet" href="style.css">
-  <link rel="icon" href="favicon.png">
+  <link rel="icon" type="image/png" href="favicon.png?v=2">
+  <link rel="shortcut icon" type="image/png" href="favicon.png?v=2">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
@@ -14,8 +16,83 @@
     <div class="shape shape-2"></div>
     <div class="shape shape-3"></div>
   </div>
-  
-  <div class="container">
+  <div class="app-wrapper">
+    <div class="mobile-header">
+      <div class="mobile-logo">
+        <i class="fas fa-link"></i>
+        <span>Link Manager</span>
+      </div>
+      <button id="hamburgerBtn" class="hamburger-btn">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+    
+    <div id="mobileBackdrop" class="mobile-backdrop"></div>
+    
+    <aside id="sidebar" class="sidebar container-panel">
+      <div class="sidebar-header">
+        <h2><i class="fas fa-folder-tree"></i> Library</h2>
+      </div>
+      <ul class="sidebar-menu" id="fixedFolders">
+        <li class="folder-item active" data-folder="all">
+          <i class="fas fa-home"></i> <span>All Links</span>
+        </li>
+        <li class="folder-item" data-folder="favorites">
+          <i class="fas fa-star"></i> <span>Favorites</span>
+        </li>
+      </ul>
+      
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-title">
+        <span>My Folders</span>
+        <button id="addFolderBtn" title="Add Folder"><i class="fas fa-plus"></i></button>
+      </div>
+      
+      <ul id="folderList" class="sidebar-menu folder-list">
+        <!-- Folders will be injected here -->
+      </ul>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-title">
+        <span>Analytics</span>
+      </div>
+      <div id="dashboardView" style="display: block; padding: 0 16px; margin-top: 12px; margin-bottom: 24px;">
+        <div class="dashboard-grid">
+          <div class="dash-card">
+            <div class="dash-icon" style="background: linear-gradient(135deg, #6366f1, #4f46e5);"><i class="fas fa-link"></i></div>
+            <div class="dash-stat">
+              <h3 id="dashTotalLinks">0</h3>
+              <p>Total Links</p>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-icon" style="background: linear-gradient(135deg, #10b981, #059669);"><i class="fas fa-folder"></i></div>
+            <div class="dash-stat">
+              <h3 id="dashTotalFolders">0</h3>
+              <p>Total Folders</p>
+            </div>
+          </div>
+          <div class="dash-card">
+            <div class="dash-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);"><i class="fas fa-star"></i></div>
+            <div class="dash-stat">
+              <h3 id="dashTotalFavs">0</h3>
+              <p>Favorites</p>
+            </div>
+          </div>
+        </div>
+        <div class="dashboard-row">
+          <div class="dash-panel">
+            <h3><i class="fas fa-chart-bar"></i> Folder Distribution</h3>
+            <div id="dashFolderChart" class="dash-chart"></div>
+          </div>
+          <div class="dash-panel">
+            <h3><i class="fas fa-tags"></i> Top Tags</h3>
+            <div id="dashTopTags" class="dash-tags"></div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <div class="container container-panel main-content">
     <div class="header">
       <div class="header-icon">
         <i class="fas fa-link"></i>
@@ -37,6 +114,12 @@
         <i class="fas fa-tags"></i>
         <input type="text" id="tags" placeholder="Enter tags (optional)">
       </div>
+      <div class="input-group">
+        <i class="fas fa-folder"></i>
+        <select id="folderSelect">
+          <!-- Options injected via JS -->
+        </select>
+      </div>
       <div id="tagSuggestions" class="tag-suggestions"></div>
       <div class="form-buttons">
         <button type="submit" id="submitBtn">
@@ -50,9 +133,12 @@
       </div>
     </form>
 
-    <div class="search-container">
-      <i class="fas fa-search"></i>
-      <input type="text" id="search" placeholder="Search titles, URLs, or tags...">
+    <div class="search-header">
+      <div class="search-container">
+        <i class="fas fa-search"></i>
+        <input type="text" id="search" placeholder="Search titles, URLs, or tags...">
+      </div>
+      <button id="toggleSelectBtn" class="toggle-select-btn">Select</button>
     </div>
 
     <div id="emptyState" class="empty-state">
@@ -82,14 +168,32 @@
         <i class="fas fa-download"></i>
         <span>Export to Excel</span>
       </button>
-      <button id="importBtn">
+      <button id="importBtn" class="btn btn-import">
         <i class="fas fa-upload"></i>
         <span>Import from Excel</span>
+      </button>
+      <button id="bookmarkletBtn" class="btn" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white; border: none;">
+        <i class="fas fa-puzzle-piece"></i>
+        <span>Extension</span>
       </button>
     </div>
     <input type="file" id="importFile" accept=".xlsx" style="display:none;">
 
+    <div id="bulkActionBar" class="bulk-action-bar">
+      <span id="selectedCount" class="selected-count">0 selected</span>
+      <div class="bulk-actions">
+        <select id="bulkMoveSelect" class="bulk-move-select">
+          <option value="" disabled selected>Move to...</option>
+        </select>
+        <button id="bulkFavBtn" class="bulk-btn bulk-fav" title="Favorite"><i class="fas fa-star"></i></button>
+        <button id="bulkDelBtn" class="bulk-btn bulk-del" title="Delete"><i class="fas fa-trash"></i></button>
+      </div>
+    </div>
+
+
+
     <ul id="linksList"></ul>
+  </div>
   </div>
 
   <div id="qrModal" class="modal">
@@ -124,6 +228,80 @@
       <div class="modal-buttons">
         <button id="cancelDeleteBtn" class="btn-secondary">Cancel</button>
         <button id="confirmDeleteBtn" class="btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Extension Modal -->
+  <div id="bookmarkletModal" class="modal">
+    <div class="modal-content export-modal-content" style="max-width: 550px;">
+      <div class="modal-header-icon" style="background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); box-shadow: 0 8px 16px rgba(139, 92, 246, 0.2);">
+        <i class="fas fa-puzzle-piece"></i>
+      </div>
+      <h2>Install Chrome Extension</h2>
+      <p class="export-subtitle">Get the ultimate 1-click silent saving experience. Add any website directly to your Link Manager vault without opening new tabs!</p>
+      
+      <div style="background: #f9fafb; padding: 24px; border-radius: 16px; border: 1px solid #e5e7eb; text-align: left; margin: 24px 0;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <h4 style="margin: 0; color: #1e293b;">1. Download the Extension</h4>
+          <a href="extension.zip" download style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px;"><i class="fas fa-download"></i> Download ZIP</a>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <h4 style="margin: 0; color: #1e293b;">2. Open Chrome Extensions</h4>
+          <button onclick="navigator.clipboard.writeText('chrome://extensions'); alert('URL Copied! Paste it in a new tab.');" style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; background: #e2e8f0; color: #475569; border-radius: 8px; border: none; font-weight: 600; font-size: 13px; cursor: pointer;"><i class="fas fa-copy"></i> Copy URL</button>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <h4 style="margin: 0 0 8px 0; color: #1e293b;">3. Enable Developer Mode</h4>
+          <p style="margin: 0; font-size: 13px; color: #64748b;">Toggle the "Developer Mode" switch in the top right corner of the Extensions page.</p>
+        </div>
+        <div>
+          <h4 style="margin: 0 0 8px 0; color: #1e293b;">4. Drag and Drop</h4>
+          <p style="margin: 0; font-size: 13px; color: #64748b;">Drag the <strong>extension.zip</strong> file you downloaded straight into the center of that page to install it!</p>
+        </div>
+      </div>
+
+      <div class="export-actions" style="justify-content: center;">
+        <button id="closeBookmarkletModal" class="btn btn-secondary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div id="exportModal" class="modal">
+    <div class="modal-content export-modal-content">
+      <div class="modal-header-icon">
+        <i class="fas fa-file-export"></i>
+      </div>
+      <h2>Export Links</h2>
+      <p class="export-subtitle">Select the folders you want to export. Each folder will be saved as a separate sheet.</p>
+      
+      <div class="export-actions" style="flex-direction: column;">
+        <div style="display: flex; gap: 8px; justify-content: center; width: 100%;">
+          <button id="exportSelectAllBtn" class="btn-outline"><i class="fas fa-check-double"></i> Select All</button>
+          <button id="exportDeselectAllBtn" class="btn-outline"><i class="far fa-square"></i> Deselect All</button>
+        </div>
+        <div class="input-group" style="margin-bottom: 0; width: 100%;">
+          <i class="fas fa-search"></i>
+          <input type="text" id="exportSearchFolder" placeholder="Search folders...">
+        </div>
+      </div>
+
+      <div id="exportFolderList" class="export-folder-list">
+        <!-- Folders injected via JS -->
+      </div>
+      
+      <div style="text-align: center; margin-bottom: 16px;">
+        <span id="exportSummaryText" style="font-size: 13px; font-weight: 600; color: #4f46e5;"></span>
+      </div>
+
+      <div class="input-group" style="margin-bottom: 24px;">
+        <i class="fas fa-file-excel"></i>
+        <input type="text" id="exportFileName" placeholder="File name (e.g. my_links)" value="links">
+      </div>
+
+      <div class="modal-buttons">
+        <button id="cancelExportBtn" class="btn-secondary">Cancel</button>
+        <button id="confirmExportBtn" class="btn-primary"><i class="fas fa-download"></i> Download</button>
       </div>
     </div>
   </div>

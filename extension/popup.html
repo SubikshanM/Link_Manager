@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <img src="icon.png" alt="Logo">
+    <h2>Link Manager</h2>
+    <button id="syncBtn" class="icon-btn" title="Sync Folders">↻</button>
+  </div>
+  <div class="container">
+    <input type="text" id="title" placeholder="Title" required>
+    <input type="url" id="url" placeholder="URL" required>
+    <div class="custom-select" id="folderDropdown">
+      <div class="selected-value" id="selectedFolderValue">General</div>
+      <div class="options-container" id="folderOptions">
+        <div class="custom-option" data-value="General">General</div>
+      </div>
+    </div>
+    <button id="saveBtn">Save to Vault</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

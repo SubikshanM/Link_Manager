@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Link Manager Saver",
+  "version": "1.0",
+  "description": "Quickly save the current tab to your local Link Manager vault.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:5500/*",
+    "https://*.github.io/*"
+  ]
+}

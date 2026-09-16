@@ -1,14 +1,38 @@
 let links = JSON.parse(localStorage.getItem("links")) || [];
-let editingIndex = -1; // Track which link is being edited
-let deletingUrl = null; // Track which link is being deleted
+let folders = JSON.parse(localStorage.getItem("folders")) || ['General'];
+let currentFolder = 'all'; // 'all', 'favorites', or folder name
+let editingIndex = -1;
+let deletingUrl = null;
+
+let isSelectionMode = false;
+let selectedLinks = new Set();
+
+
+let draggedItem = null;
+let draggedItemType = null;
+let draggedItemIndex = -1;
+let draggedLinkUrl = null;
 
 const form = document.getElementById("linkForm");
 const titleInput = document.getElementById("title");
 const urlInput = document.getElementById("url");
 const tagsInput = document.getElementById("tags");
+const folderSelect = document.getElementById("folderSelect");
 const searchInput = document.getElementById("search");
 const linksList = document.getElementById("linksList");
 const cancelBtn = document.getElementById("cancelBtn");
+
+const toggleSelectBtn = document.getElementById("toggleSelectBtn");
+const bulkActionBar = document.getElementById("bulkActionBar");
+const selectedCount = document.getElementById("selectedCount");
+const bulkMoveSelect = document.getElementById("bulkMoveSelect");
+const bulkFavBtn = document.getElementById("bulkFavBtn");
+const bulkDelBtn = document.getElementById("bulkDelBtn");
+
+
+const folderList = document.getElementById("folderList");
+const fixedFolders = document.getElementById("fixedFolders");
+const addFolderBtn = document.getElementById("addFolderBtn");
 
 const exportBtn = document.getElementById("exportBtn");
 const importBtn = document.getElementById("importBtn");
@@ -286,17 +310,310 @@ function saveLinks() {
   localStorage.setItem("links", JSON.stringify(links));
 }
 
+function saveFolders() {
+  localStorage.setItem("folders", JSON.stringify(folders));
+}
+
+function renderFolders() {
+  folderList.innerHTML = "";
+  folderSelect.innerHTML = "";
+  
+  fixedFolders.querySelectorAll('.folder-item').forEach(el => {
+    if (el.dataset.folder === currentFolder) {
+      el.classList.add('active');
+    } else {
+      el.classList.remove('active');
+    }
+  });
+
+  folders.forEach((folder, index) => {
+    const li = document.createElement("li");
+    li.className = "folder-item";
+    if (currentFolder === folder) li.classList.add("active");
+    li.dataset.folder = folder;
+    li.draggable = true;
+    
+    li.innerHTML = `
+      <i class="fas fa-folder"></i> <span>${folder}</span>
+      ${folder !== 'General' ? `
+      <div class="folder-actions">
+        <button class="delete-folder-btn" title="Delete folder"><i class="fas fa-times"></i></button>
+      </div>` : ''}
+    `;
+    
+    li.addEventListener('click', (e) => {
+      if(e.target.closest('.delete-folder-btn')) return;
+      currentFolder = folder;
+      if (isSelectionMode) toggleSelectionMode();
+      renderFolders();
+      renderLinks(searchInput.value);
+      if (window.innerWidth <= 768 && typeof closeMobileMenu === 'function') closeMobileMenu();
+    });
+
+    if (folder !== 'General') {
+      const delBtn = li.querySelector('.delete-folder-btn');
+      delBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (confirm(`Delete folder "${folder}"? Links will be moved to General.`)) {
+          links.forEach(l => {
+            if (l.folder === folder) l.folder = 'General';
+          });
+          saveLinks();
+          folders.splice(index, 1);
+          saveFolders();
+          if (currentFolder === folder) currentFolder = 'all';
+          renderFolders();
+          renderLinks(searchInput.value);
+        }
+      };
+    }
+
+    setupFolderDragAndDrop(li, folder, index);
+    folderList.appendChild(li);
+
+    const option = document.createElement("option");
+    option.value = folder;
+    option.textContent = folder;
+    if (currentFolder === folder) option.selected = true;
+    folderSelect.appendChild(option);
+  });
+}
+
+fixedFolders.addEventListener('click', (e) => {
+  const item = e.target.closest('.folder-item');
+  if (item) {
+    currentFolder = item.dataset.folder;
+    if (isSelectionMode) toggleSelectionMode();
+    renderFolders();
+    renderLinks(searchInput.value);
+    if (window.innerWidth <= 768 && typeof closeMobileMenu === 'function') closeMobileMenu();
+  }
+});
+
+// Allow dropping links on "All Links" (moves to General) and "Favorites" (marks as fav)
+fixedFolders.querySelectorAll('.folder-item').forEach(li => {
+  li.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (draggedItemType === 'link') {
+      li.classList.add('drag-over');
+    }
+  });
+  li.addEventListener('dragleave', () => li.classList.remove('drag-over'));
+  li.addEventListener('drop', (e) => {
+    e.preventDefault();
+    li.classList.remove('drag-over');
+    if (draggedItemType === 'link') {
+      const linkIndex = links.findIndex(l => l.url === draggedLinkUrl);
+      if (linkIndex !== -1) {
+        if (li.dataset.folder === 'all') {
+          links[linkIndex].folder = 'General';
+          showToast('Moved to General', 'success');
+        } else if (li.dataset.folder === 'favorites') {
+          links[linkIndex].favorite = true;
+          showToast('Added to Favorites', 'success');
+        }
+        saveLinks();
+        renderLinks(searchInput.value);
+      }
+    }
+  });
+});
+
+addFolderBtn.addEventListener('click', () => {
+  const name = prompt("Enter new folder name:");
+  if (name && name.trim() !== '') {
+    const trimmed = name.trim();
+    if (folders.includes(trimmed) || trimmed.toLowerCase() === 'all' || trimmed.toLowerCase() === 'favorites') {
+      showToast('Folder already exists!', 'error');
+    } else {
+      folders.push(trimmed);
+      saveFolders();
+      renderFolders();
+      showToast('Folder created!', 'success');
+    }
+  }
+});
+
+function setupFolderDragAndDrop(li, folderName, folderIndex) {
+  li.addEventListener('dragstart', (e) => {
+    draggedItem = li;
+    draggedItemType = 'folder';
+    draggedItemIndex = folderIndex;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => li.style.opacity = '0.5', 0);
+  });
+
+  li.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (draggedItemType === 'folder' && draggedItem !== li) {
+      li.classList.add('drag-over');
+    } else if (draggedItemType === 'link') {
+      li.classList.add('drag-over');
+    }
+  });
+
+  li.addEventListener('dragleave', () => li.classList.remove('drag-over'));
+
+  li.addEventListener('drop', (e) => {
+    e.preventDefault();
+    li.classList.remove('drag-over');
+    
+    if (draggedItemType === 'folder' && draggedItem !== li) {
+      const fromIndex = draggedItemIndex;
+      const toIndex = folderIndex;
+      const movedFolder = folders.splice(fromIndex, 1)[0];
+      folders.splice(toIndex, 0, movedFolder);
+      saveFolders();
+      renderFolders();
+    } else if (draggedItemType === 'link') {
+      const linkIndex = links.findIndex(l => l.url === draggedLinkUrl);
+      if (linkIndex !== -1 && links[linkIndex].folder !== folderName) {
+        links[linkIndex].folder = folderName;
+        saveLinks();
+        renderLinks(searchInput.value);
+        showToast(`Moved to ${folderName}`, 'success');
+      }
+    }
+  });
+
+  li.addEventListener('dragend', () => {
+    li.style.opacity = '1';
+    draggedItem = null;
+    draggedItemType = null;
+  });
+}
+
+function setupLinkDragAndDrop(li, linkObj) {
+  li.addEventListener('dragstart', (e) => {
+    draggedItem = li;
+    draggedItemType = 'link';
+    draggedLinkUrl = linkObj.url;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => li.classList.add('dragging'), 0);
+  });
+
+  li.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    if (draggedItemType === 'link' && draggedItem !== li) {
+      const bounding = li.getBoundingClientRect();
+      const offset = bounding.y + (bounding.height / 2);
+      if (e.clientY - offset > 0) {
+        li.style.borderBottom = '2px solid #667eea';
+        li.style.borderTop = '';
+      } else {
+        li.style.borderTop = '2px solid #667eea';
+        li.style.borderBottom = '';
+      }
+    }
+  });
+
+  li.addEventListener('dragleave', () => {
+    li.style.borderTop = '';
+    li.style.borderBottom = '';
+  });
+
+  li.addEventListener('drop', (e) => {
+    e.preventDefault();
+    li.style.borderTop = '';
+    li.style.borderBottom = '';
+    
+    if (draggedItemType === 'link' && draggedItem !== li) {
+      const fromIndex = links.findIndex(l => l.url === draggedLinkUrl);
+      const toIndex = links.findIndex(l => l.url === linkObj.url);
+      
+      if (fromIndex !== -1 && toIndex !== -1) {
+        const bounding = li.getBoundingClientRect();
+        const offset = bounding.y + (bounding.height / 2);
+        
+        let insertIndex = toIndex;
+        if (e.clientY - offset > 0) insertIndex = toIndex + 1;
+        if (fromIndex < insertIndex) insertIndex--;
+        
+        const movedLink = links.splice(fromIndex, 1)[0];
+        links.splice(insertIndex, 0, movedLink);
+        
+        saveLinks();
+        renderLinks(searchInput.value);
+      }
+    }
+  });
+
+  li.addEventListener('dragend', () => {
+    li.classList.remove('dragging');
+    draggedItem = null;
+    draggedItemType = null;
+    draggedLinkUrl = null;
+    document.querySelectorAll('.link-item').forEach(item => {
+      item.style.borderTop = '';
+      item.style.borderBottom = '';
+    });
+  });
+}
+
+
 function renderLinks(filter = "") {
+  if(typeof renderDashboard === 'function') renderDashboard();
+  
+  const actionButtons = document.querySelector('.action-buttons');
+  
+  if (currentFolder === 'favorites') {
+    form.style.display = 'none';
+    if(actionButtons) actionButtons.style.display = 'none';
+  } else {
+    form.style.display = '';
+    if(actionButtons) actionButtons.style.display = '';
+  }
+  
   linksList.innerHTML = "";
 
-  let filtered = links.filter(l =>
+  let filtered = links;
+  
+  // Parse URL parameters for bookmarklet or extension auto-fill
+  const urlParams = new URLSearchParams(window.location.search);
+  const addUrl = urlParams.get('url');
+  const addTitle = urlParams.get('title');
+  const addFolder = urlParams.get('folder');
+  const addTags = urlParams.get('tags');
+  const autosave = urlParams.get('autosave');
+  
+  if (addUrl && !window.bookmarkletProcessed) {
+    if (autosave === 'true') {
+      window.bookmarkletProcessed = true;
+      links.unshift({
+        id: Date.now().toString(),
+        title: addTitle || new URL(addUrl).hostname,
+        url: addUrl,
+        tags: addTags || '',
+        folder: addFolder || 'General',
+        favorite: false
+      });
+      saveLinks();
+      // Wait for React/UI to settle just in case, though this is loaded in a background iframe
+      setTimeout(() => {
+        window.close();
+      }, 100);
+    } else {
+      urlInput.value = addUrl;
+      if (addTitle) titleInput.value = addTitle;
+      if (addTags) tagsInput.value = addTags;
+      window.bookmarkletProcessed = true; // Prevent re-triggering
+      setTimeout(() => form.scrollIntoView({behavior: 'smooth'}), 500);
+    }
+  }
+
+  filtered = filtered.filter(l =>
     l.title.toLowerCase().includes(filter.toLowerCase()) ||
     l.url.toLowerCase().includes(filter.toLowerCase()) ||
     (l.tags && l.tags.toLowerCase().includes(filter.toLowerCase()))
   );
 
-  // Show/hide empty state
-  if (links.length === 0) {
+  if (currentFolder === 'favorites') {
+    filtered = filtered.filter(l => l.favorite);
+  } else if (currentFolder !== 'all') {
+    filtered = filtered.filter(l => (l.folder || 'General') === currentFolder);
+  }
+
+  if (filtered.length === 0) {
     emptyState.classList.add('show');
     linksList.style.display = 'none';
   } else {
@@ -304,19 +621,34 @@ function renderLinks(filter = "") {
     linksList.style.display = 'block';
   }
 
-  // Sort: favorites first, then by creation order (newer first)
-  filtered.sort((a, b) => {
-    if (b.favorite !== a.favorite) {
-      return b.favorite - a.favorite; // Favorites first
-    }
-    // If both are favorites or both are not, maintain original order
-    return links.indexOf(b) - links.indexOf(a);
-  });
+  if (currentFolder === 'all') {
+    filtered.sort((a, b) => {
+      if (b.favorite !== a.favorite) {
+        return b.favorite - a.favorite;
+      }
+      return 0;
+    });
+  }
 
   filtered.forEach((link) => {
     const li = document.createElement("li");
     li.className = "link-item";
+    li.draggable = true;
+    setupLinkDragAndDrop(li, link);
     if (link.favorite) li.classList.add("favorite");
+
+    li.style.position = "relative";
+    const dragHandle = document.createElement("i");
+    dragHandle.className = "fas fa-grip-vertical drag-handle";
+    dragHandle.style.position = "absolute";
+    dragHandle.style.left = "16px";
+    dragHandle.style.top = "50%";
+    dragHandle.style.transform = "translateY(-50%)";
+    dragHandle.style.color = "rgba(0,0,0,0.15)";
+    dragHandle.style.cursor = "grab";
+    dragHandle.style.fontSize = "1.2rem";
+    dragHandle.style.padding = "10px";
+    li.appendChild(dragHandle);
 
     const info = document.createElement("div");
     info.className = "link-info";
@@ -329,10 +661,17 @@ function renderLinks(filter = "") {
       domain = '';
     }
     
-    const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : '';
+    let faviconUrl = '';
+    if (domain === window.location.hostname && new URL(link.url).port === window.location.port) {
+      faviconUrl = 'favicon.png';
+    } else if (domain === 'localhost' || domain === '127.0.0.1') {
+      faviconUrl = `http://${new URL(link.url).host}/favicon.ico`;
+    } else {
+      faviconUrl = domain ? `https://icon.horse/icon/${domain}` : '';
+    }
     
     info.innerHTML = `
-      <div class="link-content">
+      <div class="link-content" style="padding-left: 36px;">
         ${faviconUrl ? `<img src="${faviconUrl}" class="link-favicon" onerror="this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM5Y2EzYWYiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTAgMTNhNSA1IDAgMCAwIDcuNTQgNC4zOWw0LjI5IDQuMjltLTcuODMtNC4zOUE1IDUgMCAxIDAgNS40NiA4Ljg5bS00LjI5LTQuMjltMTMuNjYgMTMuNjZMMy0zIi8+PC9zdmc+'">` : '<div class="link-favicon-placeholder"><i class="fas fa-link"></i></div>'}
         <div class="link-text">
           <a href="${link.url}" target="_blank">${link.title}</a>
@@ -341,6 +680,33 @@ function renderLinks(filter = "") {
       </div>
       ${link.tags ? `<small class="tags">${link.tags}</small>` : ''}
     `;
+
+    // Add checkbox
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "link-checkbox";
+    checkbox.checked = selectedLinks.has(link.url);
+    
+    checkbox.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        selectedLinks.add(link.url);
+        li.classList.add('selected');
+      } else {
+        selectedLinks.delete(link.url);
+        li.classList.remove('selected');
+      }
+      updateBulkActionBar();
+    });
+
+    li.addEventListener('click', (e) => {
+      if (isSelectionMode && !e.target.closest('.action') && e.target !== checkbox) {
+        checkbox.checked = !checkbox.checked;
+        checkbox.dispatchEvent(new Event('change'));
+      }
+    });
+
+    info.prepend(checkbox);
+
 
     const actions = document.createElement("div");
 
@@ -382,6 +748,7 @@ function renderLinks(filter = "") {
         titleInput.value = links[editingIndex].title;
         urlInput.value = links[editingIndex].url;
         tagsInput.value = links[editingIndex].tags || '';
+        folderSelect.value = links[editingIndex].folder || 'General';
         
         // Generate suggestions for editing
         const suggestions = generateTagSuggestions(links[editingIndex].url);
@@ -491,6 +858,10 @@ window.onclick = (event) => {
     document.body.style.overflow = "auto";
     deletingUrl = null;
   }
+  if (event.target === exportModal) {
+    exportModal.classList.remove("show");
+    document.body.style.overflow = "auto";
+  }
 };
 
 form.addEventListener("submit", (e) => {
@@ -498,6 +869,8 @@ form.addEventListener("submit", (e) => {
   const title = titleInput.value.trim();
   const url = urlInput.value.trim();
   const tags = tagsInput.value.trim();
+  const folder = folderSelect.value;
+
 
   if (!title || !url) {
     showToast('Please enter both title and URL!', 'error');
@@ -512,29 +885,26 @@ form.addEventListener("submit", (e) => {
   }
 
   if (editingIndex !== -1) {
-    // Update existing link
     links[editingIndex] = { 
       ...links[editingIndex],
       title, 
       url, 
-      tags 
+      tags,
+      folder
     };
     showToast('Link updated successfully!', 'success');
     editingIndex = -1;
-    
-    // Reset buttons
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.innerHTML = '<i class="fas fa-plus"></i><span>Add Link</span>';
     submitBtn.style.background = '';
     cancelBtn.style.display = 'none';
-    cancelBtn.style.display = 'none';
   } else {
-    // Add new link
-    links.push({ title, url, tags, favorite: false });
+    links.unshift({ title, url, tags, favorite: false, folder: folder || 'General' });
     showToast('Link added successfully!', 'success');
   }
   
   saveLinks();
+  renderFolders();
   renderLinks();
   form.reset();
   displayTagSuggestions([]); // Clear suggestions
@@ -559,62 +929,460 @@ searchInput.addEventListener("input", () => {
   renderLinks(searchInput.value);
 });
 
-exportBtn.addEventListener("click", () => {
-  const exportData = links.map(link => ({
-    Title: link.title,
-    URL: link.url,
-    Tags: link.tags,
-    Favorite: link.favorite ? 'Yes' : 'No'
-  }));
 
-  const ws = XLSX.utils.json_to_sheet(exportData);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Links");
-  XLSX.writeFile(wb, "links.xlsx");
+function toggleSelectionMode() {
+  isSelectionMode = !isSelectionMode;
+  if (isSelectionMode) {
+    toggleSelectBtn.textContent = 'Cancel';
+    toggleSelectBtn.classList.add('active');
+    linksList.classList.add('selection-mode');
+    
+    // Disable drag and drop during selection mode
+    document.querySelectorAll('.link-item').forEach(li => li.draggable = false);
+  } else {
+    toggleSelectBtn.textContent = 'Select';
+    toggleSelectBtn.classList.remove('active');
+    linksList.classList.remove('selection-mode');
+    selectedLinks.clear();
+    document.querySelectorAll('.link-checkbox').forEach(cb => cb.checked = false);
+    bulkActionBar.classList.remove('show');
+    
+    // Re-enable drag and drop
+    document.querySelectorAll('.link-item').forEach(li => li.draggable = true);
+  }
+}
+
+if (toggleSelectBtn) {
+  toggleSelectBtn.addEventListener('click', toggleSelectionMode);
+}
+
+function updateBulkActionBar() {
+  if (selectedLinks.size > 0) {
+    bulkActionBar.classList.add('show');
+    selectedCount.textContent = `${selectedLinks.size} selected`;
+    
+    // Populate Move To dropdown based on current folder
+    bulkMoveSelect.innerHTML = '<option value="" disabled selected>Move to...</option>';
+    
+    // If in a specific folder, exclude it. If in all/favorites, include General.
+    const foldersToShow = folders.filter(f => {
+      if (currentFolder === 'all' || currentFolder === 'favorites') return true;
+      return f !== currentFolder; // Exclude current folder if viewing a specific one
+    });
+    
+    // If viewing a specific folder, and it's not General, make sure General is an option
+    if (currentFolder !== 'all' && currentFolder !== 'favorites' && currentFolder !== 'General' && !foldersToShow.includes('General')) {
+      foldersToShow.unshift('General');
+    }
+
+    foldersToShow.forEach(f => {
+      const opt = document.createElement('option');
+      opt.value = f;
+      opt.textContent = f;
+      bulkMoveSelect.appendChild(opt);
+    });
+  } else {
+    bulkActionBar.classList.remove('show');
+  }
+}
+
+if (bulkMoveSelect) {
+  bulkMoveSelect.addEventListener('change', (e) => {
+    const targetFolder = e.target.value;
+    if (targetFolder) {
+      const count = selectedLinks.size;
+      links.forEach(l => {
+        if (selectedLinks.has(l.url)) {
+          l.folder = targetFolder;
+        }
+      });
+      saveLinks();
+      renderLinks(searchInput.value);
+      toggleSelectionMode();
+      showToast(`Moved ${count} links to ${targetFolder}`, 'success');
+    }
+  });
+}
+
+if (bulkFavBtn) {
+  bulkFavBtn.addEventListener('click', () => {
+    const count = selectedLinks.size;
+    links.forEach(l => {
+      if (selectedLinks.has(l.url)) {
+        l.favorite = true;
+      }
+    });
+    saveLinks();
+    renderLinks(searchInput.value);
+    toggleSelectionMode();
+    showToast(`Favorited ${count} links`, 'success');
+  });
+}
+
+if (bulkDelBtn) {
+  bulkDelBtn.addEventListener('click', () => {
+    if (confirm(`Delete ${selectedLinks.size} links?`)) {
+      links = links.filter(l => !selectedLinks.has(l.url));
+      saveLinks();
+      renderLinks(searchInput.value);
+      toggleSelectionMode();
+      showToast('Links deleted successfully', 'success');
+    }
+  });
+}
+
+
+
+const exportModal = document.getElementById("exportModal");
+const exportFolderList = document.getElementById("exportFolderList");
+const confirmExportBtn = document.getElementById("confirmExportBtn");
+const cancelExportBtn = document.getElementById("cancelExportBtn");
+const exportSelectAllBtn = document.getElementById("exportSelectAllBtn");
+const exportDeselectAllBtn = document.getElementById("exportDeselectAllBtn");
+const exportSearchFolder = document.getElementById("exportSearchFolder");
+const exportSummaryText = document.getElementById("exportSummaryText");
+const exportFileName = document.getElementById("exportFileName");
+
+function updateExportSummary() {
+  const checkboxes = Array.from(document.querySelectorAll(".export-folder-checkbox"));
+  const selected = checkboxes.filter(cb => cb.checked);
+  
+  let totalLinks = 0;
+  selected.forEach(cb => {
+    const count = parseInt(cb.dataset.count) || 0;
+    totalLinks += count;
+  });
+  
+  exportSummaryText.textContent = `Exporting ${selected.length} folders (${totalLinks} total links)`;
+}
+
+// Bookmarklet functionality
+const bookmarkletBtn = document.getElementById('bookmarkletBtn');
+if (bookmarkletBtn) {
+  bookmarkletBtn.addEventListener('click', () => {
+    const modal = document.getElementById('bookmarkletModal');
+    if (modal) {
+      modal.classList.add('show');
+      const origin = window.location.origin;
+      const pathname = window.location.pathname;
+      const link = document.getElementById('bookmarkletLink');
+      if (link) {
+        link.href = "javascript:(function(){var title=encodeURIComponent(document.title);var url=encodeURIComponent(window.location.href);window.open('" + origin + pathname + "?title='+title+'&url='+url, '_blank');})();";
+      }
+    }
+  });
+}
+
+const closeBookmarkletModal = document.getElementById('closeBookmarkletModal');
+if (closeBookmarkletModal) {
+  closeBookmarkletModal.addEventListener('click', () => {
+    document.getElementById('bookmarkletModal').classList.remove('show');
+  });
+}
+
+exportBtn.addEventListener("click", () => {
+  exportFolderList.innerHTML = '';
+  exportSearchFolder.value = '';
+  exportFileName.value = 'links';
+  
+  folders.forEach(folder => {
+    const label = document.createElement("label");
+    label.className = "export-folder-label";
+    
+    // Calculate links in this folder
+    const folderLinks = links.filter(l => (l.folder || 'General') === folder);
+    const linkCount = folderLinks.length;
+    
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.className = "export-folder-checkbox";
+    checkbox.value = folder;
+    checkbox.checked = true;
+    checkbox.dataset.count = linkCount;
+    
+    checkbox.addEventListener("change", updateExportSummary);
+    
+    const icon = document.createElement("i");
+    icon.className = "fas fa-folder";
+    icon.style.color = "#9ca3af";
+    icon.style.marginLeft = "4px";
+    
+    const textWrapper = document.createElement("div");
+    textWrapper.style.display = "flex";
+    textWrapper.style.flexDirection = "column";
+    textWrapper.style.marginLeft = "8px";
+    textWrapper.style.flex = "1";
+    
+    const titleSpan = document.createElement("span");
+    titleSpan.textContent = folder;
+    titleSpan.style.fontWeight = "500";
+    titleSpan.style.color = "#374151";
+    
+    const countSpan = document.createElement("span");
+    countSpan.textContent = `${linkCount} link${linkCount !== 1 ? 's' : ''}`;
+    countSpan.style.fontSize = "12px";
+    countSpan.style.color = "#6b7280";
+    
+    textWrapper.appendChild(titleSpan);
+    textWrapper.appendChild(countSpan);
+    
+    label.appendChild(checkbox);
+    label.appendChild(icon);
+    label.appendChild(textWrapper);
+    exportFolderList.appendChild(label);
+  });
+  
+  updateExportSummary();
+  exportModal.classList.add("show");
+  document.body.style.overflow = "hidden";
 });
+
+exportSearchFolder.addEventListener("input", (e) => {
+  const term = e.target.value.toLowerCase();
+  const labels = document.querySelectorAll(".export-folder-label");
+  labels.forEach(label => {
+    const folderName = label.querySelector("input").value.toLowerCase();
+    if (folderName.includes(term)) {
+      label.style.display = "flex";
+    } else {
+      label.style.display = "none";
+    }
+  });
+});
+
+exportSelectAllBtn.addEventListener("click", () => {
+  document.querySelectorAll(".export-folder-checkbox").forEach(cb => {
+    if (cb.closest('label').style.display !== 'none') cb.checked = true;
+  });
+  updateExportSummary();
+});
+
+exportDeselectAllBtn.addEventListener("click", () => {
+  document.querySelectorAll(".export-folder-checkbox").forEach(cb => {
+    if (cb.closest('label').style.display !== 'none') cb.checked = false;
+  });
+  updateExportSummary();
+});
+
+cancelExportBtn.addEventListener("click", () => {
+  exportModal.classList.remove("show");
+  document.body.style.overflow = "auto";
+});
+
+confirmExportBtn.addEventListener("click", () => {
+  const selectedFolders = Array.from(document.querySelectorAll(".export-folder-checkbox"))
+                               .filter(cb => cb.checked)
+                               .map(cb => cb.value);
+                               
+  if (selectedFolders.length === 0) {
+    showToast("Please select at least one folder to export", "warning");
+    return;
+  }
+  
+  const wb = XLSX.utils.book_new();
+  
+  selectedFolders.forEach(folderName => {
+    const folderLinks = links.filter(l => (l.folder || 'General') === folderName);
+    
+    const exportData = folderLinks.map(link => ({
+      Title: link.title,
+      URL: link.url,
+      Tags: link.tags,
+      Favorite: link.favorite ? 'Yes' : 'No'
+    }));
+    
+    const ws = XLSX.utils.json_to_sheet(exportData.length ? exportData : [{Title: "", URL: "", Tags: "", Favorite: ""}]);
+    let sheetName = folderName.substring(0, 31);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+  });
+
+  const finalFileName = (exportFileName.value.trim() || "links") + ".xlsx";
+  XLSX.writeFile(wb, finalFileName);
+  
+  exportModal.classList.remove("show");
+  document.body.style.overflow = "auto";
+  showToast(`Exported ${selectedFolders.length} folders successfully!`, "success");
+});
+
 
 importBtn.addEventListener("click", () => importFile.click());
 importFile.addEventListener("change", (e) => {
   const file = e.target.files[0];
-  const reader = new FileReader();
+  if (!file) return;
 
+  const reader = new FileReader();
   reader.onload = (event) => {
     const data = new Uint8Array(event.target.result);
     const workbook = XLSX.read(data, { type: "array" });
-    const sheetName = workbook.SheetNames[0];
-    const importedData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    
+    let totalImported = 0;
 
-    const sanitizedLinks = importedData
-      .map(row => {
-        const titleKey = Object.keys(row).find(k => k.toLowerCase() === 'title');
-        const urlKey = Object.keys(row).find(k => k.toLowerCase() === 'url');
-        const tagsKey = Object.keys(row).find(k => k.toLowerCase() === 'tags');
-        const favoriteKey = Object.keys(row).find(k => k.toLowerCase() === 'favorite');
-        
-        return {
-          title: titleKey ? row[titleKey] || "" : "",
-          url: urlKey ? row[urlKey] || "" : "",
-          tags: tagsKey ? row[tagsKey] || "" : "",
-          favorite: favoriteKey ? (row[favoriteKey].toString().toLowerCase() === 'yes' || !!row[favoriteKey]) : false
-        };
-      })
-      .filter(link => link.url);
-
-    sanitizedLinks.forEach(importedLink => {
-      const existingLinkIndex = links.findIndex(l => l.url === importedLink.url);
-
-      if (existingLinkIndex !== -1) {
-        links[existingLinkIndex] = importedLink;
-      } else {
-        links.push(importedLink);
+    workbook.SheetNames.forEach(sheetName => {
+      const folderName = sheetName;
+      // Add folder if it doesn't exist
+      if (folderName !== 'General' && !folders.includes(folderName)) {
+        folders.push(folderName);
       }
+      
+      const sheet = workbook.Sheets[sheetName];
+      const importedData = XLSX.utils.sheet_to_json(sheet);
+      
+      const sanitizedLinks = importedData
+        .map(row => {
+          const titleKey = Object.keys(row).find(k => k.toLowerCase() === 'title');
+          const urlKey = Object.keys(row).find(k => k.toLowerCase() === 'url');
+          const tagsKey = Object.keys(row).find(k => k.toLowerCase() === 'tags');
+          const favoriteKey = Object.keys(row).find(k => k.toLowerCase() === 'favorite');
+          
+          return {
+            title: titleKey ? row[titleKey] || "" : "",
+            url: urlKey ? row[urlKey] || "" : "",
+            tags: tagsKey ? row[tagsKey] || "" : "",
+            favorite: favoriteKey ? (row[favoriteKey].toString().toLowerCase() === 'yes' || !!row[favoriteKey]) : false,
+            folder: folderName
+          };
+        })
+        .filter(link => link.url); // Only keep valid URLs
+        
+      sanitizedLinks.forEach(importedLink => {
+        const existingLinkIndex = links.findIndex(l => l.url === importedLink.url);
+
+        if (existingLinkIndex !== -1) {
+          links[existingLinkIndex] = importedLink;
+        } else {
+          links.push(importedLink);
+        }
+      });
+      
+      totalImported += sanitizedLinks.length;
     });
 
     saveLinks();
+    saveFolders();
+    renderFolders();
     renderLinks();
-    showToast(`Imported ${sanitizedLinks.length} links successfully!`, 'success');
+    showToast(`Imported ${totalImported} links successfully!`, 'success');
   };
   reader.readAsArrayBuffer(file);
 });
 
+renderFolders();
 renderLinks();
+
+function renderDashboard() {
+  const dashTotalLinks = document.getElementById('dashTotalLinks');
+  const dashTotalFolders = document.getElementById('dashTotalFolders');
+  const dashTotalFavs = document.getElementById('dashTotalFavs');
+  const dashFolderChart = document.getElementById('dashFolderChart');
+  const dashTopTags = document.getElementById('dashTopTags');
+  
+  if (!dashTotalLinks) return;
+  
+  // Calculate Totals
+  dashTotalLinks.textContent = links.length;
+  dashTotalFolders.textContent = folders.length;
+  dashTotalFavs.textContent = links.filter(l => l.favorite).length;
+  
+  // Calculate Folder Distribution
+  const folderCounts = {};
+  links.forEach(l => {
+    const f = l.folder || 'General';
+    folderCounts[f] = (folderCounts[f] || 0) + 1;
+  });
+  
+  // Convert to array and sort by count descending
+  const sortedFolders = Object.keys(folderCounts).map(f => ({ name: f, count: folderCounts[f] }))
+                              .sort((a, b) => b.count - a.count)
+                              .slice(0, 5); // top 5
+                              
+  dashFolderChart.innerHTML = '';
+  
+  if (sortedFolders.length === 0) {
+    dashFolderChart.innerHTML = '<p style="color:#6b7280; font-size:14px;">No folders yet.</p>';
+  } else {
+    const maxCount = sortedFolders[0].count;
+    sortedFolders.forEach(item => {
+      const percentage = (item.count / maxCount) * 100;
+      
+      const barContainer = document.createElement('div');
+      barContainer.className = 'chart-bar-container';
+      
+      barContainer.innerHTML = `
+        <div class="chart-label">
+          <span>${item.name}</span>
+          <span>${item.count}</span>
+        </div>
+        <div class="chart-bar-bg">
+          <div class="chart-bar-fill" style="width: ${percentage}%"></div>
+        </div>
+      `;
+      
+      dashFolderChart.appendChild(barContainer);
+    });
+  }
+  
+  // Calculate Top Tags
+  const tagCounts = {};
+  links.forEach(l => {
+    if (l.tags) {
+      const tagsArray = l.tags.split(',').map(t => t.trim().toLowerCase()).filter(t => t);
+      tagsArray.forEach(t => {
+        tagCounts[t] = (tagCounts[t] || 0) + 1;
+      });
+    }
+  });
+  
+  const sortedTags = Object.keys(tagCounts).map(t => ({ name: t, count: tagCounts[t] }))
+                           .sort((a, b) => b.count - a.count)
+                           .slice(0, 10); // top 10
+                           
+  dashTopTags.innerHTML = '';
+  if (sortedTags.length === 0) {
+    dashTopTags.innerHTML = '<p style="color:#6b7280; font-size:14px;">No tags used yet.</p>';
+  } else {
+    sortedTags.forEach(tag => {
+      const tagEl = document.createElement('span');
+      tagEl.className = 'dash-tag';
+      tagEl.textContent = `#${tag.name} (${tag.count})`;
+      dashTopTags.appendChild(tagEl);
+    });
+  }
+}
+
+
+// --- Mobile Responsiveness Logic ---
+const hamburgerBtn = document.getElementById("hamburgerBtn");
+const mobileBackdrop = document.getElementById("mobileBackdrop");
+const sidebar = document.getElementById("sidebar");
+
+function toggleMobileMenu() {
+  sidebar.classList.toggle("mobile-open");
+  mobileBackdrop.classList.toggle("show");
+  
+  if (sidebar.classList.contains("mobile-open")) {
+    document.body.style.overflow = "hidden";
+  } else {
+    document.body.style.overflow = "auto";
+  }
+}
+
+function closeMobileMenu() {
+  sidebar.classList.remove("mobile-open");
+  mobileBackdrop.classList.remove("show");
+  document.body.style.overflow = "auto";
+}
+
+if (hamburgerBtn && mobileBackdrop) {
+  hamburgerBtn.addEventListener("click", toggleMobileMenu);
+  mobileBackdrop.addEventListener("click", closeMobileMenu);
+  
+  // Close menu when a folder is clicked on mobile
+  const allFolderItems = document.querySelectorAll(".folder-item");
+  allFolderItems.forEach(item => {
+    item.addEventListener("click", () => {
+      if (window.innerWidth <= 768) {
+        closeMobileMenu();
+      }
+    });
+  });
+}
